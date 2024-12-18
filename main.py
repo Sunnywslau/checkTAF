@@ -100,9 +100,13 @@ def main():
     region_options = list(region_data.keys()) + ["ALL"]
     selected_region = st.sidebar.selectbox("Select Region", options=region_options)
 
+    # Initialize session state for refresh
+    if 'refresh_data' not in st.session_state:
+        st.session_state.refresh_data = False  # Initialize the variable
+
     # Manual refresh button
     if st.sidebar.button("Refresh Now"):
-        st.experimental_rerun()
+        st.session_state.refresh_data = True  # Set the flag to refresh data
 
     # Load airport data
     input_file_path = "./Airport_list.txt"
