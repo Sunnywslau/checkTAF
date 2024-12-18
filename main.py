@@ -101,7 +101,7 @@ def main():
     st.title("TAF Information Dashboard")
 
     # Load region data
-    region_file_path = r"CheckTAF\Region.txt"  # Adjust this path as needed
+    region_file_path = "./Region.txt"  # Adjust this path as needed
     region_data = load_region_data(region_file_path)
 
     # Add "ALL" option to the sidebar selection
@@ -115,7 +115,7 @@ def main():
         st.experimental_rerun()
 
     # Load airport data
-    input_file_path = r"CheckTAF\Airport_list.txt"  # Adjust this path as needed
+    input_file_path = "./Airport_list.txt"  # Adjust this path as needed
     airport_data = {}
     try:
         with open(input_file_path, 'r') as file:
