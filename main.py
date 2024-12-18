@@ -2,31 +2,24 @@ import streamlit as st
 import pandas as pd
 import requests
 import re
-import time
 from datetime import datetime
+from streamlit_autorefresh import st_autorefresh
 
 # Set the page config to wide mode
 st.set_page_config(layout="wide")
 
-# Timer for auto-refresh
-if 'last_run' not in st.session_state:
-    st.session_state.last_run = time.time()
-    st.session_state.last_update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S HKT")
-
-# Refresh every 60 seconds (1 minute)
-if time.time() - st.session_state.last_run > 60:
-    st.session_state.last_run = time.time()
-    st.session_state.last_update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S HKT")
-#    st.experimental_rerun()
+# Run the autorefresh about every 60 seconds
+count = st_autorefresh(interval=60000, limit=3000, key="MySunnylcounter")
 
 def fetch_taf(airport_ids):
     url = f"https://aviationweather.gov/api/data/taf?ids={','.join(airport_ids)}"
-    response = requests.get(url)
-    if response.status_code == 200:
-        return response.text.strip().splitlines()
-    else:
-        st.error("Error fetching TAF data.")
-        return []
+    with st.spinner("Fetching TAF data..."):
+        response = requests.get(url)
+        if response.status_code == 200:
+            return response.text.strip().splitlines()
+        else:
+            st.error("Error fetching TAF data.")
+            return []
 
 def parse_taf_data(taf_lines):
     taf_dict = {}
@@ -57,8 +50,7 @@ def highlight_taf(taf_text):
     taf_text = taf_text.replace('\n', '<br>')
     visibility_pattern = r'(?<=\s)(\d{4})(?=\s|<br>)'
     cloud_ceiling_pattern = r'(?<!\S)\b(BKN|OVC)(\d{3})\b(?=\s|<br>)'
-   # unmeasured_visibility_pattern = r'(?<!\S)\bVV///\b(?=\s|<br>)'
-    unmeasured_visibility_pattern = r'(?<!\S)(VV///)(?=\s|<br>)'  # Simplified capturing group
+    unmeasured_visibility_pattern = r'(?<!\S)(VV///)(?=\s|<br>)'  
     freezing_conditions_pattern = r'(?<!\S)([-+]?FZ(?:DZ|RA))(?=\s|<br>)'
 
     def highlight_visibility(match):
@@ -66,8 +58,8 @@ def highlight_taf(taf_text):
         return f"<span style='color: red; font-weight: bold;'>{visibility}</span>" if int(visibility) < 3000 else visibility
 
     def highlight_cloud_ceiling(match):
-        cloud_type = match.group(1)  # BKN or OVC
-        height = int(match.group(2)) * 100  # Convert 3-digit height to feet
+        cloud_type = match.group(1)
+        height = int(match.group(2)) * 100
         return f"<span style='color: pink; font-weight: bold;'>{cloud_type}{match.group(2)}</span>" if height < 1000 else match.group(0)
 
     def highlight_unmeasured_visibility(match):
@@ -87,7 +79,7 @@ def load_region_data(file_path):
     region_dict = {}
     try:
         with open(file_path, 'r') as file:
-            next(file)
+            next(file)  # Skip header if present
             for line in file:
                 line = line.strip()
                 if line:
@@ -101,7 +93,7 @@ def main():
     st.title("TAF Information Dashboard")
 
     # Load region data
-    region_file_path = "./Region.txt"  # Adjust this path as needed
+    region_file_path = "./Region.txt"
     region_data = load_region_data(region_file_path)
 
     # Add "ALL" option to the sidebar selection
@@ -110,12 +102,10 @@ def main():
 
     # Manual refresh button
     if st.sidebar.button("Refresh Now"):
-        st.session_state.last_run = time.time()
-        st.session_state.last_update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S HKT")
         st.experimental_rerun()
 
     # Load airport data
-    input_file_path = "./Airport_list.txt"  # Adjust this path as needed
+    input_file_path = "./Airport_list.txt"
     airport_data = {}
     try:
         with open(input_file_path, 'r') as file:
@@ -164,26 +154,37 @@ def main():
     if rows:
         df = pd.DataFrame(rows)
 
-        # Convert DataFrame to HTML
-        html_content = df.to_html(escape=False, index=False)
+        # Convert DataFrame to HTML with Bootstrap classes
+        html_content = df.to_html(classes='table table-striped', escape=False, index=False)
 
-        # Set fixed widths in the HTML
-        html_content = html_content.replace('<table border="1" class="dataframe">',
-                                             '<table border="1" class="dataframe" style="table-layout: fixed; width: 100%;">')
-        html_content = html_content.replace('<th>Airport Code</th>',
-                                             '<th style="width: 8ch;">Airport Code</th>')
-        html_content = html_content.replace('<th>Destination TAF</th>',
-                                             '<th style="width: 55ch;">Destination TAF</th>')
-        html_content = html_content.replace('<th>Alternate TAFs</th>',
-                                             '<th style="width: 55ch;">Alternate TAFs</th>')
-
+        # Include Bootstrap CSS and custom styles for header
+        st.markdown(
+            """
+            <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+            <style>
+                .table {
+                    margin-top: 10px; /* Adjust the margin above the table */
+                }
+                .table thead th {
+                    background-color: #007BFF; /* Bootstrap primary color */
+                    color: white;
+                    font-weight: bold;
+                    text-align: center; /* Center header text */
+                }
+                .table tbody tr:hover {
+                    background-color: #f1f1f1; /* Highlight on hover */
+                }
+            </style>
+            """, unsafe_allow_html=True
+        )
+        
         # Display the HTML table
         st.markdown(html_content, unsafe_allow_html=True)
     else:
-        st.write("Good weather for all relevant airports.")
+        st.write("No significant weather for all relevant airports.")
 
-    # Display the last update time in HKT
-    st.sidebar.write(f"Last Updated: {st.session_state.last_update_time} (HKT)")
+    # Display the last update time
+    st.sidebar.write(f"Last Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 if __name__ == "__main__":
     main()
