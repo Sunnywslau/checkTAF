@@ -17,7 +17,7 @@ if 'last_run' not in st.session_state:
 if time.time() - st.session_state.last_run > 60:
     st.session_state.last_run = time.time()
     st.session_state.last_update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S HKT")
-    st.experimental_rerun()
+#    st.experimental_rerun()
 
 def fetch_taf(airport_ids):
     url = f"https://aviationweather.gov/api/data/taf?ids={','.join(airport_ids)}"
