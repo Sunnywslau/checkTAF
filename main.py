@@ -9,7 +9,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(layout="wide")
 
 # Run the autorefresh about every 60 seconds
-count = st_autorefresh(interval=60000, limit=3000, key="MySunnylcounter")
+count = st_autorefresh(interval=600000, limit=3000, key="MySunnylcounter")
 
 def fetch_taf(airport_ids):
     url = f"https://aviationweather.gov/api/data/taf?ids={','.join(airport_ids)}"
