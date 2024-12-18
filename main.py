@@ -114,7 +114,7 @@ if password == CORRECT_PASSWORD:
         st.title("TAF Information Dashboard")
 
         # Load region data
-        region_file_path = r"CheckTAF\Region.txt"
+        region_file_path = "./Region.txt"
         region_data = load_region_data(region_file_path)
 
         # Add "ALL" option to the sidebar selection
@@ -126,7 +126,7 @@ if password == CORRECT_PASSWORD:
             st.rerun()
 
         # Load airport data
-        input_file_path = r"CheckTAF\Airport_list.txt"
+        input_file_path = "./Airport_list.txt"
         airport_data = load_airport_data(input_file_path)
 
         # Determine relevant airports based on the selected region
