@@ -3,5 +3,4 @@ streamlit
 matplotlib
 numpy
 requests
-re
 time
