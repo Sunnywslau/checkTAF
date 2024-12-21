@@ -9,7 +9,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(layout="wide")
 
 # Run the autorefresh about every 60 seconds
-count = st_autorefresh(interval=60000, limit=3000, key="MySunnylcounter")
+count = st_autorefresh(interval=600000, limit=3000, key="MySunnylcounter")
 
 # Define the correct password
 CORRECT_PASSWORD = "sunny"  # Change this to your desired password
