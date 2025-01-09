@@ -55,10 +55,10 @@ if password == CORRECT_PASSWORD:
 
     def highlight_taf(taf_text):
         taf_text = taf_text.replace('\n', '<br>')
-        visibility_pattern = r'(?<=\s)(\d{4})(?=\s|<br>)'
-        cloud_ceiling_pattern = r'(?<!\S)\b(BKN|OVC)(\d{3})\b(?=\s|<br>)'
-        unmeasured_visibility_pattern = r'(?<!\S)(VV///)(?=\s|<br>)'  
-        freezing_conditions_pattern = r'(?<!\S)([-+]?FZ(?:DZ|RA))(?=\s|<br>)'
+        visibility_pattern = r'(?<=\s)(\d{4})(?=\s|<br>|$)'
+        cloud_ceiling_pattern = r'(?<!\S)\b(BKN|OVC)(\d{3})\b(?=\s|<br>|$)'
+        unmeasured_visibility_pattern = r'(?<!\S)(VV///)(?=\s|<br>|$)'  
+        freezing_conditions_pattern = r'(?<!\S)([-+]?FZ(?:DZ|RA))(?=\s|<br>|$)'
 
         def highlight_visibility(match):
             visibility = match.group(0)
