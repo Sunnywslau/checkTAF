@@ -1,5 +1,4 @@
 pandas
 streamlit
-matplotlib
-numpy
-streamlit_autorefresh
+requests
+streamlit-autorefresh
