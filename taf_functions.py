@@ -58,7 +58,7 @@ def highlight_taf(taf_text):
     cloud_ceiling_pattern = r'(?<!\S)\b(BKN|OVC)(\d{3})\b(?=\s|<br>|$)'
     unmeasured_visibility_pattern = r'(?<!\S)(VV///|VV\d{3}?)(?=\s|<br>|$)'
     freezing_conditions_pattern = r'(?<!\S)([-+]?FZ(?:DZ|RA))(?=\s|<br>|$)'
-    snow_pattern = r'(?<!\S)(SN)(?=\s|<br>|$)'
+    snow_pattern = r'(?:^|\s|<br>)([+-]?[A-Z]*SN[A-Z]*)(?=\s|$|<br>)'   
 
     def highlight_visibility(match):
         visibility = match.group(0)
@@ -77,7 +77,7 @@ def highlight_taf(taf_text):
         return f"<span style='color: blue; font-weight: bold;'>{match.group(0)}</span>"
 
     def highlight_snow(match):
-        return f"<span style='color: green; background-color: blue; font-weight: bold;'>{match.group(0)}</span>"
+        return f"<span style='color: green; font-weight: bold;'>{match.group(0)}</span>"
 
     # Apply highlighting
     highlighted_taf = re.sub(visibility_pattern, highlight_visibility, taf_text)
