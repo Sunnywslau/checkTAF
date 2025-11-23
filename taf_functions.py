@@ -136,7 +136,6 @@ def load_enroute_alternates(file_path):
         st.error(f"Enroute alternates file not found: {file_path}")
     return enroute_dict
 
-
 def get_bootstrap_css():
     """Return Bootstrap CSS and custom styles"""
     return """
@@ -234,9 +233,26 @@ def get_bootstrap_css():
             width: 400px !important;
             min-width: 400px !important;
         }
+
+        /* New: separate multiple TAF blocks inside a single table cell */
+        .taf-block {
+            border-bottom: 1px dotted rgba(0,0,0,0.12);
+            padding-bottom: 8px;
+            margin-bottom: 8px;
+        }
+        .taf-block:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        .taf-block .airport-label {
+            display: inline-block;
+            width: 56px;
+            font-weight: 600;
+            margin-right: 6px;
+        }
     </style>
     """
-
 
 def process_destinations_data(filtered_airport_data, airport_data, show_all_airports):
     """Process destinations and alternates TAF data"""
@@ -250,13 +266,28 @@ def process_destinations_data(filtered_airport_data, airport_data, show_all_airp
         taf_data[dest] = {airport: taf_dict.get(airport, 'No data available') for airport in all_airports}
     
     for dest, taf_info in taf_data.items():
+        # Destination (single airport) highlighted
         highlighted_dest_taf = highlight_taf(taf_info[dest])
         
-        if show_all_airports or '<span' in highlighted_dest_taf:
+        # Build alternates content: wrap each alternate's TAF in a .taf-block div and include the airport code label
+        alternates_blocks = []
+        for alt in airport_data.get(dest, []):
+            alt_taf_raw = taf_info.get(alt, 'No data available')
+            alt_highlighted = highlight_taf(alt_taf_raw)
+            # Only include if show_all_airports or highlighted content exists
+            if show_all_airports or '<span' in alt_highlighted:
+                alternates_blocks.append(
+                    f'<div class="taf-block"><span class="airport-label">{alt}:</span> {alt_highlighted}</div>'
+                )
+        
+        # Only include the row if destination meets condition or any alternate blocks to show
+        if show_all_airports or '<span' in highlighted_dest_taf or alternates_blocks:
             row = {
                 "Airport": dest,
-                "Destinations": highlighted_dest_taf,
-                "Alternates": "<br><br>".join(highlight_taf(taf_info[alt]) for alt in airport_data[dest])
+                # Destination shown as single block (keeps consistent styling)
+                "Destinations": f'<div class="taf-block">{highlighted_dest_taf}</div>',
+                # Join alternate blocks (they are already wrapped and separated by dotted lines)
+                "Alternates": ''.join(alternates_blocks) if alternates_blocks else '<div class="taf-block">No data available</div>'
             }
             rows.append(row)
     
@@ -267,45 +298,34 @@ def process_enroute_data(selected_region, enroute_data, show_all_airports):
     """Process enroute alternates TAF data"""
     enroute_rows = []
     
+    def _collect_for_airports(region_name, airports):
+        if not airports:
+            return None
+        enroute_taf_lines = fetch_taf(airports)
+        enroute_taf_dict = parse_taf_data(enroute_taf_lines)
+        collected_tafs = []
+        for airport in airports:
+            taf_text = enroute_taf_dict.get(airport, 'No data available')
+            highlighted_taf = highlight_taf(taf_text)
+            if show_all_airports or '<span' in highlighted_taf:
+                collected_tafs.append(f'<div class="taf-block"><span class="airport-label">{airport}:</span> {highlighted_taf}</div>')
+        if collected_tafs:
+            return {"Region": region_name, "EDTO ERAs": ''.join(collected_tafs)}
+        return None
+
     if selected_region == "ALL":
         for region, airports in enroute_data.items():
-            if airports:
-                enroute_taf_lines = fetch_taf(airports)
-                enroute_taf_dict = parse_taf_data(enroute_taf_lines)
-                
-                collected_tafs = []
-                for airport in airports:
-                    taf_text = enroute_taf_dict.get(airport, 'No data available')
-                    highlighted_taf = highlight_taf(taf_text)
-                    if show_all_airports or '<span' in highlighted_taf:
-                        collected_tafs.append(f"{airport}: {highlighted_taf}")
-                
-                if collected_tafs:
-                    enroute_rows.append({
-                        "Region": region,
-                        "EDTO ERAs": "<br><br>".join(collected_tafs)
-                    })
+            row = _collect_for_airports(region, airports)
+            if row:
+                enroute_rows.append(row)
     else:
         if selected_region in enroute_data:
-            airports = enroute_data[selected_region]
-            if airports:
-                enroute_taf_lines = fetch_taf(airports)
-                enroute_taf_dict = parse_taf_data(enroute_taf_lines)
-                
-                collected_tafs = []
-                for airport in airports:
-                    taf_text = enroute_taf_dict.get(airport, 'No data available')
-                    highlighted_taf = highlight_taf(taf_text)
-                    if show_all_airports or '<span' in highlighted_taf:
-                        collected_tafs.append(f"{airport}: {highlighted_taf}")
-                
-                if collected_tafs:
-                    enroute_rows.append({
-                        "Region": selected_region,
-                        "EDTO ERAs": "<br><br>".join(collected_tafs)
-                    })
+            row = _collect_for_airports(selected_region, enroute_data[selected_region])
+            if row:
+                enroute_rows.append(row)
     
     return enroute_rows
+
 
 
 def display_tables(rows, enroute_rows, show_all_airports):
