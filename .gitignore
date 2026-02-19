@@ -1,0 +1,8 @@
+venv/
+__pycache__/
+*.log
+*.txt
+.streamlit/
+.vscode/
+test_highlights.py
+streamlit_log.txt

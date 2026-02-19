@@ -8,18 +8,57 @@ import pandas as pd
 import requests
 import re
 from datetime import datetime
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+# --- GLOBAL SESSION WITH RETRY ---
+def get_session():
+    if "api_session" not in st.session_state:
+        session = requests.Session()
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET"]
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        st.session_state.api_session = session
+    return st.session_state.api_session
+# ---------------------------------
+
+# --- CONFIGURATION / THRESHOLDS ---
+# Dispatcher suitability thresholds
+VIS_THRESHOLD = 3000  # Meters
+CEILING_THRESHOLD = 1000  # Feet
+
+# Highlight colors
+COLOR_CRITICAL_VIS = "red"      # Visibility below threshold
+COLOR_CRITICAL_CEIL = "pink"     # Ceiling below threshold
+COLOR_UNMEASURED = "purple"     # VV/// or VVnnn
+COLOR_FREEZING = "blue"         # Freezing conditions (FZ)
+COLOR_SNOW = "green"            # Snow (SN)
+# ----------------------------------
 
 
+@st.cache_data(ttl=300)  # Cache results for 5 minutes
 def fetch_taf(airport_ids):
-    """Fetch TAF data from aviationweather.gov API"""
+    """Fetch TAF data from aviationweather.gov API with timeout, retries, and caching"""
+    if not airport_ids:
+        return []
+        
+    session = get_session()
     url = f"https://aviationweather.gov/api/data/taf?ids={','.join(airport_ids)}"
-    with st.spinner("Fetching TAF data..."):
-        response = requests.get(url)
+    try:
+        # Spinner is handled outside the cached function for better UI
+        response = session.get(url, timeout=20)
         if response.status_code == 200:
             return response.text.strip().splitlines()
         else:
-            st.error("Error fetching TAF data.")
             return []
+    except requests.exceptions.RequestException as e:
+        return []
 
 
 def parse_taf_data(taf_lines):
@@ -50,43 +89,84 @@ def parse_taf_data(taf_lines):
 
 
 def highlight_taf(taf_text):
-    """Highlight weather conditions in TAF text"""
+    """Highlight weather conditions in TAF text using configurable thresholds and keywords"""
     taf_text = taf_text.replace('\n', '<br>')
     
-    # Define regex patterns for weather conditions
+    # Boundary-aware regex patterns (using \b or lookarounds to stay precise)
+    # Visibility: 4 digits
     visibility_pattern = r'(?<=\s)(\d{4})(?=\s|<br>|$)'
-    cloud_ceiling_pattern = r'(?<!\S)\b(BKN|OVC)(\d{3})\b(?=\s|<br>|$)'
-    unmeasured_visibility_pattern = r'(?<!\S)(VV///|VV\d{3}?)(?=\s|<br>|$)'
-    freezing_conditions_pattern = r'(?<!\S)([-+]?FZ(?:DZ|RA))(?=\s|<br>|$)'
-    snow_pattern = r'(?:^|\s|<br>)([+-]?[A-Z]*SN[A-Z]*)(?=\s|$|<br>)'   
+    # Cloud Ceiling: BKN/OVC followed by 3 digits
+    cloud_ceiling_pattern = r'\b(BKN|OVC)(\d{3})\b'
+    # Vertical Visibility / Unmeasured
+    unmeasured_pattern = r'\b(VV///|VV\d{3})\b'
+    # Freezing conditions: FZ anywhere as a weather group (e.g. -FZDZ, FZRA)
+    freezing_pattern = r'(?<!\S)(\S*?FZ[A-Z]*)(?!\S)'
+    # Snow: SN anywhere as a weather group (e.g. -SN, BLSN, SNRA)
+    snow_pattern = r'(?<!\S)(\S*?SN[A-Z]*)(?!\S)'
 
     def highlight_visibility(match):
         visibility = match.group(0)
-        visibility_meters = int(visibility)
-        return f"<span style='color: red; font-weight: bold;'>{visibility}</span>" if visibility_meters < 3000 else visibility
+        try:
+            val = int(visibility)
+            if val < VIS_THRESHOLD:
+                return f"<span style='color: {COLOR_CRITICAL_VIS}; font-weight: bold;'>{visibility}</span>"
+        except ValueError:
+            pass
+        return visibility
 
     def highlight_cloud_ceiling(match):
         cloud_type = match.group(1)
-        height = int(match.group(2)) * 100
-        return f"<span style='color: pink; font-weight: bold;'>{cloud_type}{match.group(2)}</span>" if height < 1000 else match.group(0)
+        try:
+            height = int(match.group(2)) * 100
+            if height < CEILING_THRESHOLD:
+                return f"<span style='color: {COLOR_CRITICAL_CEIL}; font-weight: bold;'>{cloud_type}{match.group(2)}</span>"
+        except ValueError:
+            pass
+        return match.group(0)
 
-    def highlight_unmeasured_visibility(match):
-        return f"<span style='color: purple; font-weight: bold;'>{match.group(0)}</span>"
+    def highlight_unmeasured(match):
+        return f"<span style='color: {COLOR_UNMEASURED}; font-weight: bold;'>{match.group(0)}</span>"
 
-    def highlight_freezing_conditions(match):
-        return f"<span style='color: blue; font-weight: bold;'>{match.group(0)}</span>"
+    def highlight_freezing(match):
+        return f"<span style='color: {COLOR_FREEZING}; font-weight: bold;'>{match.group(0)}</span>"
 
     def highlight_snow(match):
-        return f"<span style='color: green; font-weight: bold;'>{match.group(0)}</span>"
+        return f"<span style='color: {COLOR_SNOW}; font-weight: bold;'>{match.group(0)}</span>"
 
-    # Apply highlighting
-    highlighted_taf = re.sub(visibility_pattern, highlight_visibility, taf_text)
-    highlighted_taf = re.sub(cloud_ceiling_pattern, highlight_cloud_ceiling, highlighted_taf)
-    highlighted_taf = re.sub(unmeasured_visibility_pattern, highlight_unmeasured_visibility, highlighted_taf)
-    highlighted_taf = re.sub(freezing_conditions_pattern, highlight_freezing_conditions, highlighted_taf)
-    highlighted_taf = re.sub(snow_pattern, highlight_snow, highlighted_taf)
+    # Sequential regex substitution
+    highlighted = re.sub(visibility_pattern, highlight_visibility, taf_text)
+    highlighted = re.sub(cloud_ceiling_pattern, highlight_cloud_ceiling, highlighted)
+    highlighted = re.sub(unmeasured_pattern, highlight_unmeasured, highlighted)
+    highlighted = re.sub(freezing_pattern, highlight_freezing, highlighted)
+    highlighted = re.sub(snow_pattern, highlight_snow, highlighted)
 
-    return highlighted_taf
+    return highlighted
+
+
+def highlight_notam_text(text, query=""):
+    """Highlight critical keywords and search query in NOTAM text"""
+    # Critical dispatcher keywords to ALWAYS highlight
+    critical_keywords = [
+        r'\bCLSD\b', r'\bCLOSED\b', r'\bU/S\b', r'\bUNSERVICEABLE\b', 
+        r'\bWIP\b', r'\bWORK IN PROGRESS\b', r'\bMAY BE CLOSED\b'
+    ]
+    
+    # 1. Highlight critical keywords (Yellow background, red text)
+    for kw in critical_keywords:
+        text = re.sub(kw, lambda m: f"<span class='notam-critical'>{m.group(0)}</span>", text, flags=re.IGNORECASE)
+    
+    # 2. Highlight Runway patterns (Bold underline)
+    rwy_pattern = r'\bRWY\s?\d{2}[LRC]?\b|\bRUNWAY\s?\d{2}[LRC]?\b'
+    text = re.sub(rwy_pattern, lambda m: f"<span class='notam-rwy'>{m.group(0)}</span>", text, flags=re.IGNORECASE)
+
+    # 3. Highlight User Search Query (Cyan background)
+    if query and len(query) >= 2:
+        # Avoid highlighting already created HTML tags
+        query_pattern = f"({re.escape(query)})"
+        # Only highlight if not inside a tag (simplistic check)
+        text = re.sub(query_pattern, lambda m: f"<span class='notam-search'>{m.group(0)}</span>", text, flags=re.IGNORECASE)
+
+    return text
 
 
 def load_region_data(file_path):
@@ -251,42 +331,95 @@ def get_bootstrap_css():
             font-weight: 600;
             margin-right: 6px;
         }
+        
+        /* NOTAM Console Styles */
+        .notam-console-container {
+            background-color: #fcfcfc;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .notam-card {
+            background-color: white;
+            border-left: 5px solid #17a2b8;
+            margin-bottom: 12px;
+            padding: 10px 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .notam-card-rwy {
+            border-left-color: #ffc107;
+            background-color: #fffbef;
+        }
+        .notam-id-badge {
+            background-color: #6c757d;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        .notam-critical {
+            background-color: #ffcccc;
+            color: #b30000;
+            font-weight: bold;
+            padding: 0 2px;
+        }
+        .notam-rwy {
+            color: #d94100;
+            font-weight: bold;
+            text-decoration: underline;
+        }
+        .notam-search {
+            background-color: #cce5ff;
+            color: #004085;
+            font-weight: bold;
+            padding: 0 2px;
+        }
     </style>
     """
 
 def process_destinations_data(filtered_airport_data, airport_data, show_all_airports):
-    """Process destinations and alternates TAF data"""
-    taf_data = {}
+    """Process destinations and alternates TAF data with Batch Fetching"""
     rows = []
     
+    # BATCH FETCHING: Collect ALL unique airport IDs first
+    all_needed_airports = set()
     for dest, alternates in filtered_airport_data.items():
-        all_airports = [dest] + alternates
-        taf_info_lines = fetch_taf(all_airports)
-        taf_dict = parse_taf_data(taf_info_lines)
-        taf_data[dest] = {airport: taf_dict.get(airport, 'No data available') for airport in all_airports}
+        all_needed_airports.add(dest)
+        for alt in alternates:
+            all_needed_airports.add(alt)
     
-    for dest, taf_info in taf_data.items():
-        # Destination (single airport) highlighted
-        highlighted_dest_taf = highlight_taf(taf_info[dest])
+    # Single API call for the entire region!
+    with st.spinner(f"Fetching TAF for {len(all_needed_airports)} airports..."):
+        taf_info_lines = fetch_taf(list(all_needed_airports))
+        taf_dict = parse_taf_data(taf_info_lines)
+    
+    for dest, alternates in filtered_airport_data.items():
+        # Destination highlighted
+        raw_dest_taf = taf_dict.get(dest, 'No data available')
+        highlighted_dest_taf = highlight_taf(raw_dest_taf)
         
-        # Build alternates content: wrap each alternate's TAF in a .taf-block div and include the airport code label
+        # Build alternates content
         alternates_blocks = []
-        for alt in airport_data.get(dest, []):
-            alt_taf_raw = taf_info.get(alt, 'No data available')
+        for alt in alternates:
+            alt_taf_raw = taf_dict.get(alt, 'No data available')
             alt_highlighted = highlight_taf(alt_taf_raw)
             # Only include if show_all_airports or highlighted content exists
             if show_all_airports or '<span' in alt_highlighted:
+                # Optimized: Make the airport label itself a link to trigger NOTAM
+                notam_btn = f'<a href="/?notam={alt}" target="_self" style="text-decoration: none; color: #17a2b8; font-weight: bold;">{alt}</a>'
                 alternates_blocks.append(
-                    f'<div class="taf-block"><span class="airport-label">{alt}:</span> {alt_highlighted}</div>'
+                    f'<div class="taf-block"><span class="airport-label">{notam_btn}:</span> {alt_highlighted}</div>'
                 )
         
         # Only include the row if destination meets condition or any alternate blocks to show
         if show_all_airports or '<span' in highlighted_dest_taf or alternates_blocks:
             row = {
                 "Airport": dest,
-                # Destination shown as single block (keeps consistent styling)
                 "Destinations": f'<div class="taf-block">{highlighted_dest_taf}</div>',
-                # Join alternate blocks (they are already wrapped and separated by dotted lines)
                 "Alternates": ''.join(alternates_blocks) if alternates_blocks else '<div class="taf-block">No data available</div>'
             }
             rows.append(row)
@@ -295,34 +428,42 @@ def process_destinations_data(filtered_airport_data, airport_data, show_all_airp
 
 
 def process_enroute_data(selected_region, enroute_data, show_all_airports):
-    """Process enroute alternates TAF data"""
+    """Process enroute alternates TAF data with Batch Fetching"""
     enroute_rows = []
     
-    def _collect_for_airports(region_name, airports):
-        if not airports:
-            return None
-        enroute_taf_lines = fetch_taf(airports)
+    # BATCH FETCHING: Collect all airports for all selected regions
+    all_needed_airports = set()
+    regions_to_process = []
+    if selected_region == "ALL":
+        regions_to_process = list(enroute_data.keys())
+    elif selected_region in enroute_data:
+        regions_to_process = [selected_region]
+        
+    for region in regions_to_process:
+        for airport in enroute_data[region]:
+            all_needed_airports.add(airport)
+            
+    if not all_needed_airports:
+        return []
+
+    # Single API call for enroute data!
+    with st.spinner(f"Fetching enroute TAF for {len(all_needed_airports)} airports..."):
+        enroute_taf_lines = fetch_taf(list(all_needed_airports))
         enroute_taf_dict = parse_taf_data(enroute_taf_lines)
+
+    for region_name in regions_to_process:
+        airports = enroute_data[region_name]
         collected_tafs = []
         for airport in airports:
             taf_text = enroute_taf_dict.get(airport, 'No data available')
             highlighted_taf = highlight_taf(taf_text)
             if show_all_airports or '<span' in highlighted_taf:
-                collected_tafs.append(f'<div class="taf-block"><span class="airport-label">{airport}:</span> {highlighted_taf}</div>')
+                # Optimized: Make the airport label itself a link to trigger NOTAM
+                notam_btn = f'<a href="/?notam={airport}" target="_self" style="text-decoration: none; color: #28a745; font-weight: bold;">{airport}</a>'
+                collected_tafs.append(f'<div class="taf-block"><span class="airport-label">{notam_btn}:</span> {highlighted_taf}</div>')
+        
         if collected_tafs:
-            return {"Region": region_name, "EDTO ERAs": ''.join(collected_tafs)}
-        return None
-
-    if selected_region == "ALL":
-        for region, airports in enroute_data.items():
-            row = _collect_for_airports(region, airports)
-            if row:
-                enroute_rows.append(row)
-    else:
-        if selected_region in enroute_data:
-            row = _collect_for_airports(selected_region, enroute_data[selected_region])
-            if row:
-                enroute_rows.append(row)
+            enroute_rows.append({"Region": region_name, "EDTO ERAs": ''.join(collected_tafs)})
     
     return enroute_rows
 
@@ -347,8 +488,12 @@ def display_tables(rows, enroute_rows, show_all_airports):
                 html_table += '</tr></thead><tbody>'
                 
                 for _, row in df.iterrows():
+                    airport = row["Airport"]
+                    # Simplified link: Since NOTAM is now at the top, just triggering the refresh is enough
+                    notam_link = f'<a href="/?notam={airport}" target="_self" style="text-decoration: none; color: white; background: #17a2b8; padding: 2px 5px; border-radius: 3px; font-size: 10px; font-weight: bold;">NOTAM</a>'
+                    
                     html_table += '<tr>'
-                    html_table += f'<td style="width: 60px; padding: 6px 4px; vertical-align: top;">{row["Airport"]}</td>'
+                    html_table += f'<td style="width: 60px; padding: 6px 4px; vertical-align: top;">{airport}<br>{notam_link}</td>'
                     html_table += f'<td style="width: 400px; padding: 6px 4px; vertical-align: top; word-wrap: break-word;">{row["Destinations"]}</td>'
                     html_table += f'<td style="width: 400px; padding: 6px 4px; vertical-align: top; word-wrap: break-word;">{row["Alternates"]}</td>'
                     html_table += '</tr>'
@@ -375,8 +520,9 @@ def display_tables(rows, enroute_rows, show_all_airports):
                 html_table += '</tr></thead><tbody>'
                 
                 for _, row in enroute_df.iterrows():
+                    region = row["Region"]
                     html_table += '<tr>'
-                    html_table += f'<td style="width: 80px; padding: 6px 4px; vertical-align: top;">{row["Region"]}</td>'
+                    html_table += f'<td style="width: 80px; padding: 6px 4px; vertical-align: top;">{region}</td>'
                     html_table += f'<td style="width: 400px; padding: 6px 4px; vertical-align: top; word-wrap: break-word;">{row["EDTO ERAs"]}</td>'
                     html_table += '</tr>'
                 
