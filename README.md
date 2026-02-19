@@ -41,7 +41,40 @@ checkTAF/
 └── requirements.txt       # Dependencies
 ```
 
-## 🏗️ Architecture & Optimizations
+## 🏗️ Architecture & Flow
+
+```mermaid
+graph TD
+    subgraph "External Data Sources"
+        AWC["AviationWeather.gov (TAF API)"]
+        FAA["FAA NOTAM Service (OData API)"]
+    end
+
+    subgraph "Local Configuration"
+        CFG["TXT Configs (Regions/Airports)"]
+        SEC[".streamlit/secrets.toml"]
+    end
+
+    subgraph "Core Logic Layer"
+        TAF["taf_functions.py (TAF Logic)"]
+        NOTAM["faa_notam_lib.py (ICAO Reconstruction)"]
+    end
+
+    subgraph "UI Layer (Streamlit)"
+        MAIN["main.py (Dashboard UI)"]
+        CTRLS["Horizontal Controls"]
+        CONSOLE["NOTAM Console (Hero)"]
+    end
+
+    AWC --> TAF
+    FAA --> NOTAM
+    SEC --> NOTAM
+    CFG --> MAIN
+    TAF --> MAIN
+    NOTAM --> MAIN
+    MAIN --> CTRLS
+    MAIN --> CONSOLE
+```
 
 ### 1. Vertical Space Optimization (Dispatcher Mode)
 To ensure maximum situational awareness, we've implemented:
