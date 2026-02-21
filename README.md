@@ -11,6 +11,7 @@ A high-performance Streamlit-based aviation weather monitoring dashboard for Ter
   - **3-Column Layout**: High-density display to minimize scrolling.
   - **Smart Filtering**: Automatic exclusion of `NOTAMC` (Cancellation NOTAMs) to focus on active notices.
   - **RWY Detection**: Integrated regex to prioritize and badge runway-specific NOTAMs.
+  - **Data Integrity**: Robust deduplication layer that merges redundant Domestic/International NOTAM pairs (~50% noise reduction).
 - 🗺️ **Region Filtering**: Instant filtering of airport groups (Destinations, Alternates, ERAs).
 - 📊 **Dual Panel View**: Side-by-side display for main destinations vs. EDTO ERAs.
 - 🎨 **Expert Weather Highlighting**:
@@ -88,7 +89,8 @@ The `faa_notam_lib.py` module handles the raw FAA data to reconstruct the standa
 - **Font Consistency**: Forced 11px Monospace CSS isolation to prevent browser font boosting in long telegrams (e.g., VMMC long NOTAMs).
 
 ### 3. State & Persistence
-- **Zero-Ghost Persistence**: NOTAM console state is synced with URL parameters but cleared instantly when switching regions or clicking "Close", ensuring a clean workspace.
+- **URL-Synced Filters**: "Region" and "Show All" selections are preserved in URL query parameters (`?region=...&show_all=...`), allowing you to book-mark specific filtered views or share links.
+- **Zero-Ghost NOTAMs**: NOTAM console state is also synced with URL parameters but cleared definitively when switching regions or clicking "Close", ensuring no stale data "pops up" later.
 
 ## 📁 Configuration
 - `Region.txt`: Maps regions to sets of destination airports.

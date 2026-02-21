@@ -381,7 +381,7 @@ def get_bootstrap_css():
     </style>
     """
 
-def process_destinations_data(filtered_airport_data, airport_data, show_all_airports):
+def process_destinations_data(filtered_airport_data, airport_data, show_all_airports, selected_region):
     """Process destinations and alternates TAF data with Batch Fetching"""
     rows = []
     
@@ -410,7 +410,9 @@ def process_destinations_data(filtered_airport_data, airport_data, show_all_airp
             # Only include if show_all_airports or highlighted content exists
             if show_all_airports or '<span' in alt_highlighted:
                 # Optimized: Make the airport label itself a link to trigger NOTAM
-                notam_btn = f'<a href="/?notam={alt}" target="_self" style="text-decoration: none; color: #17a2b8; font-weight: bold;">{alt}</a>'
+                # Preserve existing region and show_all state
+                url_params = f"notam={alt}&region={selected_region}&show_all={show_all_airports}"
+                notam_btn = f'<a href="/?{url_params}" target="_self" style="text-decoration: none; color: #17a2b8; font-weight: bold;">{alt}</a>'
                 alternates_blocks.append(
                     f'<div class="taf-block"><span class="airport-label">{notam_btn}:</span> {alt_highlighted}</div>'
                 )
@@ -459,7 +461,8 @@ def process_enroute_data(selected_region, enroute_data, show_all_airports):
             highlighted_taf = highlight_taf(taf_text)
             if show_all_airports or '<span' in highlighted_taf:
                 # Optimized: Make the airport label itself a link to trigger NOTAM
-                notam_btn = f'<a href="/?notam={airport}" target="_self" style="text-decoration: none; color: #28a745; font-weight: bold;">{airport}</a>'
+                url_params = f"notam={airport}&region={selected_region}&show_all={show_all_airports}"
+                notam_btn = f'<a href="/?{url_params}" target="_self" style="text-decoration: none; color: #28a745; font-weight: bold;">{airport}</a>'
                 collected_tafs.append(f'<div class="taf-block"><span class="airport-label">{notam_btn}:</span> {highlighted_taf}</div>')
         
         if collected_tafs:
@@ -469,7 +472,7 @@ def process_enroute_data(selected_region, enroute_data, show_all_airports):
 
 
 
-def display_tables(rows, enroute_rows, show_all_airports):
+def display_tables(rows, enroute_rows, show_all_airports, selected_region):
     """Display the TAF data tables side by side"""
     if rows or enroute_rows:
         st.markdown(get_bootstrap_css(), unsafe_allow_html=True)
@@ -490,7 +493,8 @@ def display_tables(rows, enroute_rows, show_all_airports):
                 for _, row in df.iterrows():
                     airport = row["Airport"]
                     # Simplified link: Since NOTAM is now at the top, just triggering the refresh is enough
-                    notam_link = f'<a href="/?notam={airport}" target="_self" style="text-decoration: none; color: white; background: #17a2b8; padding: 2px 5px; border-radius: 3px; font-size: 10px; font-weight: bold;">NOTAM</a>'
+                    url_params = f"notam={airport}&region={selected_region}&show_all={show_all_airports}"
+                    notam_link = f'<a href="/?{url_params}" target="_self" style="text-decoration: none; color: white; background: #17a2b8; padding: 2px 5px; border-radius: 3px; font-size: 10px; font-weight: bold;">NOTAM</a>'
                     
                     html_table += '<tr>'
                     html_table += f'<td style="width: 60px; padding: 6px 4px; vertical-align: top;">{airport}<br>{notam_link}</td>'
