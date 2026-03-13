@@ -176,10 +176,14 @@ class FAAClient:
                                 break
                 
                 if existing_idx is not None:
-                    # We have a duplicate event. Keep the one that is INTL or has a cleaner ID (length check)
                     existing_item = filtered_list[existing_idx]
-                    if classification == 'INTL' or len(new_notam['id']) > len(existing_item['id']):
+                    # Strict Priority: INTL always wins over DOM
+                    if new_notam['classification'] == 'INTL' and existing_item['classification'] != 'INTL':
                         filtered_list[existing_idx] = new_notam
+                    # If same classification, prefer the shorter/cleaner ID format
+                    elif new_notam['classification'] == existing_item['classification']:
+                        if len(new_notam['id']) < len(existing_item['id']):
+                            filtered_list[existing_idx] = new_notam
                 else:
                     filtered_list.append(new_notam)
 
