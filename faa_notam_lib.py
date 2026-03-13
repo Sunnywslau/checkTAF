@@ -118,11 +118,14 @@ class FAAClient:
 
                 q_code = notam_info.get('selectionCode', 'XXXXX')
                 
-                # Deduplication Key Normalization
-                # Strip Z and seconds for stable matching
-                n_start = effective_start.replace('Z', '').split('.')[0]
-                n_end = effective_end.replace('Z', '').split('.')[0]
-                n_subj = q_code[1:3] if len(q_code) >= 3 else q_code
+                # Deduplication Key: The Composite Event Signature
+                # If these 4 fields match perfectly, they represent the exact same event.
+                n_key = (
+                    loc_str,
+                    effective_start,
+                    effective_end,
+                    q_code
+                )
 
                 # Q-line Reconstruction
                 fir = notam_info.get('affectedFir', 'XXXX')
@@ -141,6 +144,7 @@ class FAAClient:
                     "location": loc_str,
                     "start": icao_date(effective_start),
                     "end": icao_date(effective_end),
+                    "issued": str(notam_info.get('issued') or ""),
                     "text": raw_text,
                     "full_icao": formatted,
                     "status": notam_info.get('status', 'Active'),
@@ -148,24 +152,33 @@ class FAAClient:
                     "schedule": core.get('notam', {}).get('schedule', ''),
                     "keyword": q_code,
                     "classification": classification,
-                    "_n_key": (n_subj, n_start, n_end, norm_loc)
+                    "_n_key": n_key
                 }
 
                 existing_idx = None
                 for i, existing in enumerate(filtered_list):
                     if existing['_n_key'] == new_notam['_n_key']:
-                        # Text similarity check
-                        t1 = re.sub(r'^' + re.escape(loc_str) + r'\s*', '', existing['text'].strip()).upper()
-                        t2 = re.sub(r'^' + re.escape(loc_str) + r'\s*', '', new_notam['text'].strip()).upper()
-                        
-                        # Match if text is similar or inclusive
-                        if t1 in t2 or t2 in t1 or abs(len(t1) - len(t2)) < 30:
+                        # Stage 1: The composite signature perfectly matched.
+                        # Stage 2: Classification Check
+                        if existing['classification'] != new_notam['classification']:
+                            # Stage 2A: One DOM, One INTL. Guaranteed true pair noise.
                             existing_idx = i
                             break
+                        else:
+                            # Stage 2B: Same classification (e.g., both INTL).
+                            # This could be the "Multiple Cranes" distinct event edge case.
+                            t1 = existing['text'].strip().upper()
+                            t2 = new_notam['text'].strip().upper()
+                            
+                            # Conservative Approach: Only merge if the text is a 100% exact match.
+                            if t1 == t2:
+                                existing_idx = i
+                                break
                 
                 if existing_idx is not None:
-                    # Prefer INTL version or the one with longer ID (likely has series)
-                    if classification == 'INTL' or len(new_notam['id']) > len(filtered_list[existing_idx]['id']):
+                    # We have a duplicate event. Keep the one that is INTL or has a cleaner ID (length check)
+                    existing_item = filtered_list[existing_idx]
+                    if classification == 'INTL' or len(new_notam['id']) > len(existing_item['id']):
                         filtered_list[existing_idx] = new_notam
                 else:
                     filtered_list.append(new_notam)

@@ -11,7 +11,8 @@ A high-performance Streamlit-based aviation weather monitoring dashboard for Ter
   - **3-Column Layout**: High-density display to minimize scrolling.
   - **Smart Filtering**: Automatic exclusion of `NOTAMC` (Cancellation NOTAMs) to focus on active notices.
   - **RWY Detection**: Integrated regex to prioritize and badge runway-specific NOTAMs.
-  - **Data Integrity**: Robust deduplication layer that merges redundant Domestic/International NOTAM pairs (~50% noise reduction).
+  - **Data Integrity (conservative)**: Robust two-stage deduplication layer that merges redundant Domestic/International NOTAM pairs (~20-50% noise reduction) requiring a 100% exact text match for same-classification collisions to ensure zero false merges.
+  - **Prioritized Chronological Sorting**: NOTAMs are sorted first by Operational Priority (Runway/Aerodrome closures) and secondarily by Issue Timestamp (descending) to guarantee the freshest critical data is always at the top.
 - 🗺️ **Region Filtering**: Instant filtering of airport groups (Destinations, Alternates, ERAs).
 - 📊 **Dual Panel View**: Side-by-side display for main destinations vs. EDTO ERAs.
 - 🎨 **Expert Weather Highlighting**:

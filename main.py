@@ -29,9 +29,23 @@ def sync_params():
     if "show_all_check" in st.session_state:
         st.query_params["show_all"] = str(st.session_state.show_all_check)
 
+def on_direct_notam_submit():
+    """Callback to handle direct airport/FIR NOTAM search"""
+    direct_val = st.session_state.direct_notam_input.strip().upper()
+    if direct_val:
+        st.query_params["notam"] = direct_val
+        st.session_state.selected_airport = direct_val
+        # The input box stays with the value, user can clear or overwrite it
+    else:
+        # If user clears the box, close the console
+        if "notam" in st.query_params:
+            del st.query_params["notam"]
+        st.session_state.selected_airport = None
+
 def create_controls(region_data):
     """Create the top horizontal control bar"""
-    col_control1, col_control2, col_control3, col_control4 = st.columns([2, 2, 2, 1])
+    # Adjusted columns to fit the new search box (Region, Search, Show All, Refresh, Clock)
+    col_control1, col_search, col_control2, col_control3, col_control4 = st.columns([1.5, 1.5, 2, 1.5, 1])
     
     with col_control1:
         region_options = sorted(list(region_data.keys()))
@@ -41,8 +55,20 @@ def create_controls(region_data):
             key="region_select",
             on_change=sync_params
         )
+        
+    with col_search:
+        # Direct NOTAM Search
+        st.text_input(
+            "🔍 Direct NOTAM", 
+            placeholder="Airport/FIR (e.g., ZBAA)", 
+            key="direct_notam_input",
+            on_change=on_direct_notam_submit,
+            help="Press Enter to directly search NOTAMs for any Airport or FIR code."
+        )
     
     with col_control2:
+        # Add slight top margin to align checkbox vertically with select/text inputs
+        st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
         show_all_airports = st.checkbox(
             "📋 Show All Airports", 
             key="show_all_check",
@@ -51,10 +77,12 @@ def create_controls(region_data):
         )
     
     with col_control3:
+        st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
         if st.button("🔄 Refresh Now"):
             st.rerun()
     
     with col_control4:
+        st.markdown("<div style='margin-top: 36px;'></div>", unsafe_allow_html=True)
         st.write(f"⏰ {datetime.now().strftime('%H:%M:%S')}")
     
     return selected_region, show_all_airports
@@ -177,6 +205,8 @@ def render_notam_console(airport_code):
             if "notam" in st.query_params:
                 del st.query_params["notam"]
             st.session_state.selected_airport = None
+            if "direct_notam_input" in st.session_state:
+                st.session_state.direct_notam_input = ""
 
         if st.button("❌ Close", use_container_width=True, type="primary", on_click=close_notam_callback):
             st.rerun()
@@ -222,6 +252,8 @@ def render_notam_console(airport_code):
 
         # REFINED PRIORITY & RUNWAY DETECTION
         import re
+        from datetime import datetime
+        
         def get_notam_metrics(n):
             text = n['text'].upper()
             q_code = n.get('keyword', '')
@@ -238,13 +270,25 @@ def render_notam_console(airport_code):
             # Tier 2: General runway mentions
             is_rwy_mention = bool(re.search(r'\b(RWY|RUNWAY)', text))
             
-            # Priority Score (Lower is higher)
-            if is_top_priority: return 0, subject, is_rwy_mention
-            if is_crit: return 1, subject, is_rwy_mention
-            if is_rwy_mention: return 2, subject, is_rwy_mention
-            return 3, subject, is_rwy_mention
+            # Secondary Sort Key: Issue Date (Descending)
+            issued_str = n.get('issued', '')
+            timestamp = 0.0
+            if issued_str:
+                try:
+                    # Parse "2025-05-16T15:37:00Z"
+                    dt = datetime.strptime(issued_str, "%Y-%m-%dT%H:%M:%SZ")
+                    timestamp = dt.timestamp()
+                except Exception:
+                    pass
+            
+            # Priority Score (Primary Sort Key: Lower is higher)
+            # -timestamp used to force descending order for secondary sort
+            if is_top_priority: return 0, -timestamp, subject, is_rwy_mention
+            if is_crit: return 1, -timestamp, subject, is_rwy_mention
+            if is_rwy_mention: return 2, -timestamp, subject, is_rwy_mention
+            return 3, -timestamp, subject, is_rwy_mention
 
-        sorted_notams = sorted(notams, key=lambda x: get_notam_metrics(x)[0])
+        sorted_notams = sorted(notams, key=lambda x: get_notam_metrics(x))
 
         st.markdown(f"**Showing {len(sorted_notams)} NOTAMs** (3-Column Power Layout)")
         
@@ -261,7 +305,7 @@ def render_notam_console(airport_code):
         for group in notam_groups:
             html_table += '<tr>'
             for n in group:
-                score, subject, is_rwy_mention = get_notam_metrics(n)
+                score, _ts, subject, is_rwy_mention = get_notam_metrics(n)
                 # Highlight based on priority
                 is_top = score == 0
                 bg_color = "#fff0f0" if is_top else ("#fffaf0" if is_rwy_mention else "#ffffff")
