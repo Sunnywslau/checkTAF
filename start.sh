@@ -3,11 +3,16 @@
 # Simple TAF Dashboard Launcher
 echo "🛩️ Starting TAF Information Dashboard..."
 
-# Navigate to the project folder
-cd /Users/sunnywslau/Code/checkTAF
+# Navigate to the project folder relative to script location
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPT_DIR"
 
 # Activate virtual environment
-source venv/bin/activate
+if [ -d "venv" ]; then
+    source venv/bin/activate
+else
+    echo "⚠️ Warning: venv folder not found. Please run 'python3 -m venv venv' and install dependencies."
+fi
 
 # Show access information
 echo "📍 Opening in browser at: http://localhost:8502"
