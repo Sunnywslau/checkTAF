@@ -100,9 +100,9 @@ def highlight_taf(taf_text):
     # Vertical Visibility / Unmeasured
     unmeasured_pattern = r'\b(VV///|VV\d{3})\b'
     # Freezing conditions: FZ anywhere as a weather group, excluding < > boundaries
-    freezing_pattern = r'(?<![^\s>])([^\s<>]*?FZ[A-Z]*)(?![^\s<])'
+    freezing_pattern = r'(?<![^\s>])([^\s<>]*?FZ[^\s<>]*)(?![^\s<])'
     # Snow: SN anywhere as a weather group, excluding < > boundaries
-    snow_pattern = r'(?<![^\s>])([^\s<>]*?SN[A-Z]*)(?![^\s<])'
+    snow_pattern = r'(?<![^\s>])([^\s<>]*?SN[^\s<>]*)(?![^\s<])'
 
     def highlight_visibility(match):
         visibility = match.group(0)
