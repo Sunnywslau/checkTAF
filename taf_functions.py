@@ -94,16 +94,15 @@ def highlight_taf(taf_text):
     
     # Boundary-aware regex patterns (using \b or lookarounds to stay precise)
     # Visibility: 4 digits
-    visibility_pattern = r'(?<=\s)(\d{4})(?=\s|<br>|$)'
+    visibility_pattern = r'(?<![^\s>])(\d{4})(?![^\s<])'
     # Cloud Ceiling: BKN/OVC followed by 3 digits
     cloud_ceiling_pattern = r'\b(BKN|OVC)(\d{3})\b'
     # Vertical Visibility / Unmeasured
     unmeasured_pattern = r'\b(VV///|VV\d{3})\b'
-    # Freezing conditions: FZ anywhere as a weather group (e.g. -FZDZ, FZRA)
-    #freezing_pattern = r'(?<!\S)(\S*?FZ[A-Z]*)(?!\S)'  
-    freezing_pattern = r'(?:\s|^)([-+]?[A-Z]*FZ[A-Z]*)(?=\s|$)'
-    # Snow: SN anywhere as a weather group (e.g. -SN, BLSN, SNRA)
-    snow_pattern = r'(?<!\S)(\S*?SN[A-Z]*)(?!\S)'
+    # Freezing conditions: FZ anywhere as a weather group, excluding < > boundaries
+    freezing_pattern = r'(?<![^\s>])([^\s<>]*?FZ[A-Z]*)(?![^\s<])'
+    # Snow: SN anywhere as a weather group, excluding < > boundaries
+    snow_pattern = r'(?<![^\s>])([^\s<>]*?SN[A-Z]*)(?![^\s<])'
 
     def highlight_visibility(match):
         visibility = match.group(0)
