@@ -101,7 +101,7 @@ def highlight_taf(taf_text):
     unmeasured_pattern = r'\b(VV///|VV\d{3})\b'
     # Freezing conditions: FZ anywhere as a weather group (e.g. -FZDZ, FZRA)
     #freezing_pattern = r'(?<!\S)(\S*?FZ[A-Z]*)(?!\S)'  
-    freezing_pattern = r'(?<!\S)([-+]?[A-Z]*FZ[A-Z]*)(?!\S)'
+    freezing_pattern = r'(?:\s|^)([-+]?[A-Z]*FZ[A-Z]*)(?=\s|$)'
     # Snow: SN anywhere as a weather group (e.g. -SN, BLSN, SNRA)
     snow_pattern = r'(?<!\S)(\S*?SN[A-Z]*)(?!\S)'
 
